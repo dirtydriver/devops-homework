@@ -1,0 +1,4 @@
+namespace        = "devops-homework-ns"
+environment      = "devops-homework"
+image_repository = "devops-homework"
+image_tag        = "1.0.0"
