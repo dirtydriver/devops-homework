@@ -3,7 +3,7 @@ variable "namespace" {
   default = "devops-homework"
 
   validation {
-    condition     = length(trimspace(var.namespace))> 0
+    condition     = length(trimspace(var.namespace)) > 0
     error_message = "Namespace cannot be empty"
   }
 }
@@ -14,7 +14,7 @@ variable "environment" {
   default     = "devops-homework"
 
   validation {
-    condition     = length(trimspace(var.environment))> 0
+    condition     = length(trimspace(var.environment)) > 0
     error_message = "Environment cannot be empty"
   }
 
