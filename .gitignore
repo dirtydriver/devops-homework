@@ -33,3 +33,4 @@ go.work.sum
 #terraform
 .terraform/
 .terraform.lock.hcl
+terraform.tfstate
