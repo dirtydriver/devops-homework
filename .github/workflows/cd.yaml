@@ -1,0 +1,84 @@
+name: Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: Image tag published by the CI workflow
+        required: true
+        type: string
+
+      environment:
+        description: Target environment
+        required: true
+        default: dev
+        type: choice
+        options:
+          - dev
+          - production
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy to ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v4
+
+      - name: Configure kubeconfig
+        env:
+          KUBECONFIG_BASE64: ${{ secrets.KUBECONFIG_BASE64 }}
+        run: |
+          if [ -z "${KUBECONFIG_BASE64}" ]; then
+            echo "KUBECONFIG_BASE64 secret is not configured."
+            exit 1
+          fi
+
+          mkdir -p "${HOME}/.kube"
+          printf '%s' "${KUBECONFIG_BASE64}" \
+            | base64 --decode \
+            > "${HOME}/.kube/config"
+
+          chmod 600 "${HOME}/.kube/config"
+
+      - name: Prepare Terraform variables
+        shell: bash
+        run: |
+          image_repository="$(echo "ghcr.io/${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')"
+
+          echo "TF_VAR_image_repository=${image_repository}" >> "${GITHUB_ENV}"
+          echo "TF_VAR_image_tag=${{ inputs.image_tag }}" >> "${GITHUB_ENV}"
+          echo "TF_VAR_environment=${{ inputs.environment }}" >> "${GITHUB_ENV}"
+
+      - name: Initialize Terraform
+        working-directory: terraform
+        run: terraform init -input=false
+
+      - name: Create Terraform plan
+        working-directory: terraform
+        run: |
+          terraform plan \
+            -input=false \
+            -out=tfplan
+
+      - name: Apply Terraform plan
+        working-directory: terraform
+        run: |
+          terraform apply \
+            -input=false \
+            -auto-approve \
+            tfplan
+
+      - name: Add deployment information to summary
+        run: |
+          echo "### Deployment completed" >> "${GITHUB_STEP_SUMMARY}"
+          echo "- Environment: \`${{ inputs.environment }}\`" >> "${GITHUB_STEP_SUMMARY}"
+          echo "- Image tag: \`${{ inputs.image_tag }}\`" >> "${GITHUB_STEP_SUMMARY}"
