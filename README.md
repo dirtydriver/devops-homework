@@ -2,225 +2,191 @@
 
 ## Overview
 
-The goal of this assignment is to evaluate how you approach a typical DevOps engineering task involving:
+This repository contains a small Go HTTP service packaged as a non-root distroless container and deployable to Kubernetes using Helm and Terraform.
 
-- Application development / scripting
-- Containerization
-- Kubernetes
-- Helm
-- Terraform
-- CI/CD
-- Code review
+The CI pipeline tests and validates the project, builds the container image, and publishes it to GitHub Container Registry. A manually triggered workflow demonstrates how an existing image could be deployed without rebuilding it.
 
-The repository contains intentionally incomplete and imperfect components.
-Your task is to complete, improve and document the solution.
+## Repository Structure
 
-You are not expected to produce a perfect production-ready system. We are more interested in your engineering approach, decision-making and ability to balance quality with the time constraints.
-
-Time limit: approximately **3 hours**
-
-## Repository Contents
-
-The repository contains:
-
-- An incomplete application skeleton
-- Terraform configuration requiring review and improvement
-- An incomplete Helm chart
-- An incomplete CI/CD pipeline
-
-Your task is to complete and improve these components. Our goal is to understand your engineering approach, and we will build the upcoming technical interview on this project.
-
-## Goal 1
-
-Complete and improve the provided project.
-
-The repository contains the following files:
-
-- Incomplete application code
-- Broken/incomplete terraform configuration
-- Incomplete Helm Chart
-- Incomplete Gitlab CI pipeline
-
-### Requirements
-
-#### Application
-
-Implement a simple application in either:
-
-- Go
-- Python
-
-The application must expose the following endpoints:
-
-##### `GET /health`
-
-**Response:**
-
-```json
-{
-    "status": "ok"
-}
+```text
+.
+├── .github/workflows/
+│   ├── ci.yaml
+│   └── cd.yaml
+├── app/
+│   ├── cmd/
+│   ├── internal/api/
+│   ├── Dockerfile
+│   └── go.mod
+├── helm/
+├── terraform/
+├── .gitlab-ci.yml
+├── ASSIGNMENT.md
+└── REVIEW.md
 ```
 
-##### `GET /version`
+## User Guide
 
-**Response:**
+### Prerequisites
 
-```json
-{
-    "version": "1.0.0"
-}
-```
+* Go 1.27
+* Docker
+* Helm 3
+* kubectl
+* Terraform 1.5 or newer
+* an existing Kubernetes cluster
 
-##### `GET /env`
-
-**Response:**
-
-```json
-{
-    "environment": "<value from ENVIRONMENT variable>"
-}
-```
-
-##### `POST /config`
-
-**Request:**
-
-```json
-{
-    "name": "database_url",
-    "value": "postgres://example"
-}
-```
-
-**Response:**
-
-```json
-{
-    "name": "database_url",
-    "value": "postgres://example"
-}
-```
-
-##### `GET /config/{name}`
-
-**Example:**
+### Run locally
 
 ```bash
-GET /config/database_url
+cd app
+ENVIRONMENT=local PORT=8080 go run ./cmd
 ```
 
-**Response:**
+Test the service:
 
-```json
-{
-    "name": "database_url",
-    "value": "postgres://example"
-}
+```bash
+curl http://localhost:8080/health
+curl http://localhost:8080/version
+curl http://localhost:8080/env
 ```
 
-##### `DELETE /config/{name}`
+### Run tests
 
-**Response:**
-
-```json
-{
-    "deleted": true
-}
+```bash
+cd app
+go vet ./...
+go test -race ./...
 ```
 
-#### Containerization
+### Build and run the container
 
-- Create the necessary Dockerfile with minimal setup
-- The image should:
-  - build successfully
-  - run locally
-  - expose the application endpoint
+```bash
+docker build -t devops-homework:1.0.0 ./app
 
-#### Terraform
+docker run --rm \
+  -p 8080:8080 \
+  -e ENVIRONMENT=local \
+  devops-homework:1.0.0
+```
 
-- Review and fix/complete the Terraform code
-- The Terraform code contains several issues and areas for improvement
-- In case you don't get time to implement changes describe what would you still improve and why
-- Document any changes you make
+### Deploy with Helm
 
-#### Helm
+For a local k3d cluster, import the image before deployment:
 
-- Review and fix/complete the Helm Chart
-- The chart should deploy the application to Kubernetes
-- Document any change you make
+```bash
+k3d image import devops-homework:1.0.0 \
+  --cluster <cluster-name>
+```
 
-#### Gitlab CI
+```bash
+helm lint ./helm
 
-- Complete the pipeline so it becomes capable of building and deploying the application
-- The pipeline should support the workflow required to build and deploy the application
-- The pipeline should be logically complete and demonstrate how you would automate the process
-- Add any other necessary jobs to the pipeline
+helm upgrade --install devops-homework ./helm \
+  --namespace devops-homework \
+  --create-namespace \
+  --set image.repository=devops-homework \
+  --set image.tag=1.0.0
+```
 
-#### Documentation
+The service can be tested without an Ingress controller using port forwarding:
 
-Update the project README with following information.
+```bash
+kubectl port-forward \
+  -n devops-homework \
+  svc/devops-homework-svc \
+  8080:80
+```
 
-##### What You Changed
+### Deploy with Terraform
 
-Describe the changes and the rationale behind it.
+```bash
+cd terraform
 
-##### Assumptions
+terraform init
+terraform validate
 
-Describe the assumptions made while completing the assignment.
+terraform apply \
+  -var="image_repository=devops-homework" \
+  -var="image_tag=1.0.0" \
+  -var="environment=local"
+```
 
-##### Known Limitations
+The Helm and Terraform commands are alternative deployment methods. The same release should not be managed with both at the same time.
 
-Describe anything you intentionally omitted.
+## API Endpoints
 
-##### Production Improvements
+| Method   | Endpoint         | Description              |
+| -------- | ---------------- | ------------------------ |
+| `GET`    | `/health`        | Application health       |
+| `GET`    | `/version`       | Application version      |
+| `GET`    | `/env`           | Current environment      |
+| `POST`   | `/config`        | Create or update a value |
+| `GET`    | `/config/{name}` | Retrieve a value         |
+| `DELETE` | `/config/{name}` | Delete a value           |
 
-Describe how you would evolve this solution for production use.
+Example:
 
-### Deliverables
+```bash
+curl -X POST http://localhost:8080/config \
+  -H "Content-Type: application/json" \
+  -d '{"name":"database_url","value":"postgres://example"}'
+```
 
-- Source Code of the Go/Python application
-- Dockerfile
-- Terraform changes
-- Helm changes
-- CI pipeline changes
-- README describing decisions, assumptions and user guide for the project.
+## CI/CD
 
-### Notes
+The GitHub Actions CI workflow:
 
-You are not expected to deploy to a cloud provider.
-The solution should work with a local Kubernetes cluster such as:
+* checks Go formatting and runs `go vet`;
+* runs tests with the race detector;
+* lints and renders the Helm chart;
+* validates the Terraform configuration;
+* builds the container image;
+* publishes the image to GHCR on pushes to `main`.
 
-- Kind
-- Minikube
-- K3d
+Published images use the first 12 characters of the commit SHA as their tag.
 
-### Timing
+The deployment workflow is triggered manually and uses Terraform to deploy an existing image tag. It requires a `KUBECONFIG_BASE64` secret for a Kubernetes cluster reachable from the GitHub runner.
 
-Timebox yourself to approximately **3 hours**. If you can't finish the work within the timebox, describe in the README.md what is left and how you would approach it.
+As agreed, I implemented CI/CD in GitHub Actions. The original `.gitlab-ci.yml` remains unchanged.
 
-## Goal 2
+## What I Changed
 
-You get this half-baked project from one of your colleagues who is a Junior and asking for your guidance.
+* Implemented the API with the Go standard library; the endpoints are simple enough that a framework wasn't needed.
+* Kept configuration in memory to avoid a database dependency for local setup, and protected the store with a mutex so concurrent requests can safely access it.
+* Added handler tests to check API responses and graceful shutdown to give active requests time to finish when the process stops.
+* Used a multi-stage Docker build to keep the compiler out of the runtime image. The service runs as a non-root user in a distroless image.
+* Fixed the Helm names, selectors, and ports so the Service routes traffic to the application. Moved deployment settings into `values.yaml` so they can be changed without editing templates.
+* Added health probes so Kubernetes can check whether the application is ready and responsive, plus resource requests and limits to set an initial CPU and memory budget.
+* Fixed the Terraform providers, variables, and chart path so Terraform can deploy the Helm chart to an existing cluster.
+* Added CI checks before publishing images and a manual deployment workflow that reuses a published image without rebuilding it.
 
-Provide a short code review in `REVIEW.md` where you address the **top 5 most important things** to fix so the colleague can move forward.
+## Assumptions
 
-### Review Timing
+* The Kubernetes cluster already exists.
+* A valid kubeconfig is available when deploying.
+* An Ingress controller is installed when Ingress is enabled.
+* The container registry is accessible from the cluster.
+* Values submitted to the configuration API are non-sensitive.
+* The resource settings are initial estimates.
 
-Spend no more than **30 minutes** on review and feedback.
+## Known Limitations
 
-### Evaluation Criteria
+* Configuration is stored in memory and is lost when the application restarts.
+* Configuration is not shared between multiple replicas.
+* The configuration API has no authentication.
+* No remote Terraform backend is configured.
+* The example CD workflow requires an externally provided, reachable cluster.
 
-We will evaluate:
+## Production Improvements
 
-- Code quality
-- Terraform quality
-- Kubernetes and Helm knowledge
-- CI/CD design and implementation
-- Documentation quality
-- Code review quality
-- Maintainability and operational thinking
+Configuration is lost on restart and isn't shared between pods, so persistent storage would be my first change before scaling the application. The `/config` endpoints also need authentication before exposing the service to other users.
 
-### Use of AI
+I'd move application deployments to a GitOps workflow with Argo CD, with the deployed image version tracked in Git. That would make application releases easier to manage without running Terraform for each deployment. Terraform would stay responsible for infrastructure, with a remote backend and state locking.
 
-The use of AI-assisted tools is permitted. However, we encourage you to complete the assignment primarily based on your own knowledge, experience and reasoning. During the interview, we will discuss your implementation choices, trade-offs and decision-making process, so it is important that you fully understand and can explain every part of your solution.
+I'd also add request metrics to monitor the service.
+
+## Additional Documents
+
+* [Code Review](REVIEW.md)
+* [Original Assignment](ASSIGNMENT.md)
