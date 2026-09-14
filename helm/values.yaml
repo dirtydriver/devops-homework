@@ -1,10 +1,31 @@
 replicaCount: 1
 
+application_name: devops-homework
+
 image:
-  repository: myapp
-  tag: latest
+  repository: devops-homework
+  tag: "1.0.0"
+  pullPolicy: IfNotPresent
+
+containerPort: 8080
+
+labels:
+  app: devops-homework-app
+
+resources:
+  requests:
+    cpu: 10m
+    memory: 16Mi
+  limits:
+    cpu: 100m
+    memory: 32Mi
 
 service:
-  port: 8080
+  type: ClusterIP
+  port: 80
+
+ingress:
+  enabled: true
+  host: devops-homework.local
 
 environment: dev
